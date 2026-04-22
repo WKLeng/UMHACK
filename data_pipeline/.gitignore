@@ -1,0 +1,5 @@
+# Ignore the generated data files
+*.csv
+
+# Ignore Python environment folders
+__pycache__/

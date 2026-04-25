@@ -1,0 +1,118 @@
+#include <DHT.h>
+#include <LiquidCrystal_I2C.h>
+#include <Wire.h>
+
+const int analogInPin = A0;
+int sensorValue = 0;
+
+#define DHTPIN 7
+#define DHTTYPE DHT11
+DHT dht(DHTPIN, DHTTYPE);
+float h;
+float t;
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+const int buzzerPin = 6;
+
+// Flag to run the delayed sequence only once per high water event
+bool highWaterSequenceDone = false;
+
+void setup() {
+  pinMode(2, OUTPUT);  // Green
+  pinMode(3, OUTPUT);  // Yellow
+  pinMode(4, OUTPUT);  // Red 1
+  pinMode(5, OUTPUT);  // Red 2
+  pinMode(buzzerPin, OUTPUT);
+
+  Serial.begin(9600);
+  Serial.println("Temperature and Humidity Sensor Test");
+
+  dht.begin();
+  lcd.init();
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print("Temp & Humidity");
+}
+
+void loop() {
+  sensorValue = analogRead(analogInPin);
+  Serial.print("sensor = ");
+  Serial.print(sensorValue);
+  Serial.print("\n");
+  delay(2);
+
+  if ((sensorValue >= 100) && (sensorValue <= 600)) {
+    // Green only
+    digitalWrite(2, HIGH);
+    digitalWrite(3, LOW);
+    digitalWrite(4, LOW);
+    digitalWrite(5, LOW);
+    noTone(buzzerPin);
+    highWaterSequenceDone = false;   // reset flag when water drops
+  }
+  else if ((sensorValue >= 601) && (sensorValue <= 649)) {
+    // Green + Yellow (instant)
+    digitalWrite(2, HIGH);
+    digitalWrite(3, HIGH);
+    digitalWrite(4, LOW);
+    digitalWrite(5, LOW);
+    noTone(buzzerPin);
+    highWaterSequenceDone = false;
+  }
+  else if ((sensorValue >= 650) && (sensorValue <= 700)) {
+    if (!highWaterSequenceDone) {
+      // Step 1: Green only
+      digitalWrite(2, HIGH);
+      digitalWrite(3, LOW);
+      digitalWrite(4, LOW);
+      digitalWrite(5, LOW);
+      noTone(buzzerPin);
+      delay(400);   // delay before adding yellow
+
+      // Step 2: Green + Yellow
+      digitalWrite(3, HIGH);
+      delay(400);   // delay before adding red
+
+      // Step 3: All LEDs on + continuous beep
+      digitalWrite(4, HIGH);
+      digitalWrite(5, HIGH);
+      tone(buzzerPin, 1000);
+
+      highWaterSequenceDone = true;
+    }
+  }
+  else {
+    // No water (below 100 or above 700)
+    digitalWrite(2, LOW);
+    digitalWrite(3, LOW);
+    digitalWrite(4, LOW);
+    digitalWrite(5, LOW);
+    noTone(buzzerPin);
+    highWaterSequenceDone = false;
+  }
+
+  // ----- DHT11 and LCD (unchanged) -----
+  h = dht.readHumidity();
+  t = dht.readTemperature();
+
+  if (isnan(h) || isnan(t)) {
+    Serial.println("Failed to read from DHT sensor!");
+  } else {
+    Serial.print("Humidity: ");
+    Serial.print(h);
+    Serial.print(" %, Temp: ");
+    Serial.print(t);
+    Serial.println(" °C");
+  }
+
+  if (!isnan(h) && !isnan(t)) {
+    lcd.setCursor(2, 1);
+    lcd.print(t, 1);
+    lcd.print("C ");
+    lcd.setCursor(9, 1);
+    lcd.print(h, 1);
+    lcd.print("%");
+  }
+
+  delay(1000);
+}

@@ -1,7 +1,24 @@
+console.log("AgriMind script loaded");
+
 /* ═══════════════════════════════════════════
    Scenario Data Store
 ═══════════════════════════════════════════ */
 const SCENARIOS = {
+  'arduino-live': {
+    label: 'Arduino Live', zoneStatus: 'Live Data', zoneBadgeClass: 'ok',
+    sensors: {
+      temperature:  { value:0, unit:'°C', name:'Temperature', range:'18–26', status:'ok', trend:'stable', pct:50 },
+      humidity:     { value:0, unit:'%', name:'Humidity', range:'60–80', status:'ok', trend:'stable', pct:50 },
+      light:        { value:800, unit:'μmol', name:'Light Intensity', range:'600–1000', status:'ok', trend:'stable', pct:70 },
+      soilMoisture: { value:0, unit:'%', name:'Soil Moisture', range:'30–60', status:'ok', trend:'stable', pct:50 },
+      ph:           { value:6.2, unit:'', name:'pH Level', range:'5.5–7.0', status:'ok', trend:'stable', pct:58 },
+      ec:           { value:1.8, unit:'mS/cm', name:'EC Level', range:'1.5–2.5', status:'ok', trend:'stable', pct:52 },
+      npk:          { N:120, P:45, K:180, name:'NPK Nutrients', status:'ok' },
+    },
+    recommendation: { title:'Awaiting AI Analysis', action:'Click Generate Gemini AI Insight to analyze live sensor data', secondary:'Recommendation will appear here once Gemini completes its assessment', priority:'low', priorityLabel:'PRIORITY: LOW', confidence:0 },
+    explanation: { text:'Live sensor data is streaming from the Arduino prototype. Click Generate Gemini AI Insight to produce an AI-driven recommendation tailored to current readings and weather context.', factors:['Temperature','Humidity','Soil Moisture','Light','Irrigation'] },
+    impact: { waterSavedPercent:0, fertilizerReductionPercent:0, yieldImprovementPercent:0, riskReduction:'low' },
+  },
   'normal': {
     label: 'Normal Condition', zoneStatus: 'Stable', zoneBadgeClass: 'ok',
     sensors: {
@@ -104,11 +121,17 @@ const ICON_COLORS = {
 /* ═══════════════════════════════════════════
    State
 ═══════════════════════════════════════════ */
-let currentScenario = 'normal';
+let currentScenario = 'arduino-live';
 let currentView = 'view-scenario';
+let latestAIInsight = null;
+let lastBackendLogs = null;
 let demoMode = false;
 let demoTimer = null;
 let lastUpdateTime = Date.now();
+let sensorPollInterval = null;
+let lastSensorData = null;
+const SOIL_WET_RAW = 350;
+const SOIL_DRY_RAW = 800;
 
 const VIEW_TITLES = {
   'view-overview': 'Farm Overview',
@@ -118,6 +141,212 @@ const VIEW_TITLES = {
   'view-impact':   'Business Impact',
   'view-logs':     'System Logs',
 };
+
+/* ═══════════════════════════════════════════
+   Sensor Status Mapping (Backend → Frontend)
+═══════════════════════════════════════════ */
+function getStatusFromValue(key, value) {
+  if (key === 'temperature') {
+    if (value >= 18 && value <= 26) return 'ok';
+    if ((value >= 13 && value < 18) || (value > 26 && value <= 31)) return 'warn';
+    return 'danger';
+  }
+  if (key === 'humidity') {
+    if (value >= 60 && value <= 80) return 'ok';
+    if ((value >= 36 && value < 60) || (value > 80 && value <= 89)) return 'warn';
+    return 'danger';
+  }
+  if (key === 'soilMoisture') {
+    if (value >= 30 && value <= 60) return 'ok';
+    if ((value >= 20 && value < 30) || (value > 60 && value <= 75)) return 'warn';
+    return 'danger';
+  }
+  return 'ok';
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function soilPercentFromRaw(raw) {
+  const pct = ((SOIL_DRY_RAW - Number(raw)) / (SOIL_DRY_RAW - SOIL_WET_RAW)) * 100;
+  return Math.round(clamp(pct, 0, 100));
+}
+
+function getActiveSensorPayload() {
+  if (currentScenario === 'arduino-live' && lastSensorData) {
+    return convertArduinoToSensorFormat(lastSensorData);
+  }
+  return SCENARIOS[currentScenario].sensors;
+}
+
+function convertArduinoToSensorFormat(arduinoData) {
+  const sensors = { ...SCENARIOS['arduino-live'].sensors };
+  const fallback = SCENARIOS.normal.sensors;
+
+  // Map live values
+  const temperature = Number(arduinoData.temperature ?? 0);
+  const humidity = Number(arduinoData.humidity ?? 0);
+  const soilMoisture = Number.isFinite(Number(arduinoData.soilMoisture))
+    ? Number(arduinoData.soilMoisture)
+    : soilPercentFromRaw(arduinoData.soilRaw ?? SOIL_DRY_RAW);
+
+  sensors.temperature.value = Math.round(temperature * 10) / 10;
+  sensors.temperature.status = getStatusFromValue('temperature', sensors.temperature.value);
+  sensors.temperature.pct = clamp(Math.round((sensors.temperature.value / 40) * 100), 0, 100);
+
+  sensors.humidity.value = Math.round(humidity);
+  sensors.humidity.status = getStatusFromValue('humidity', sensors.humidity.value);
+  sensors.humidity.pct = clamp(Math.round(sensors.humidity.value), 0, 100);
+
+  sensors.soilMoisture.value = Math.round(soilMoisture);
+  sensors.soilMoisture.pct = Math.round(soilMoisture);
+  sensors.soilMoisture.status = getStatusFromValue('soilMoisture', sensors.soilMoisture.value);
+  sensors.soilMoisture.trend = arduinoData.irrigation === 'ON' ? 'up' : 'stable';
+
+  // Keep simulated values for unavailable sensors
+  sensors.light = { ...fallback.light };
+  sensors.ph = { ...fallback.ph };
+  sensors.ec = { ...fallback.ec };
+  sensors.npk = { ...fallback.npk };
+
+  return sensors;
+}
+
+/* ═══════════════════════════════════════════
+   Backend Polling
+═══════════════════════════════════════════ */
+async function pollSensorData() {
+  try {
+    const response = await fetch('http://localhost:3000/api/sensor-data');
+    if (!response.ok) throw new Error('Backend unavailable');
+
+    const data = await response.json();
+    lastSensorData = data.latest;
+    refreshLiveSensorsZoneA();
+    refreshOverview();
+
+    // Auto-update if in arduino-live mode
+    if (currentScenario === 'arduino-live') {
+      const sensorFormat = convertArduinoToSensorFormat(data.latest);
+      SCENARIOS['arduino-live'].sensors = sensorFormat;
+      renderSensors(sensorFormat);
+
+      // Update zone status based on irrigation and soil status
+      let zoneStatus = 'Live Data';
+      let zoneBadgeClass = 'ok';
+      const soilStatus = (data.latest.soilStatus || '').toUpperCase();
+      if (soilStatus === 'CRITICAL_DRY') {
+        zoneStatus = 'Critical Dry';
+        zoneBadgeClass = 'danger';
+      } else if (soilStatus === 'DRY') {
+        zoneStatus = 'Dry';
+        zoneBadgeClass = 'warn';
+      } else if (data.latest.irrigation === 'ON') {
+        zoneStatus = 'Irrigating';
+        zoneBadgeClass = 'ok';
+      } else {
+        zoneStatus = 'Stable';
+        zoneBadgeClass = 'ok';
+      }
+      SCENARIOS['arduino-live'].zoneStatus = zoneStatus;
+      SCENARIOS['arduino-live'].zoneBadgeClass = zoneBadgeClass;
+      renderZone('arduino-live');
+    }
+  } catch (error) {
+    console.warn('Sensor poll error:', error);
+  }
+}
+
+function startSensorPolling() {
+  if (sensorPollInterval) return;
+  pollSensorData(); // Poll immediately on start
+  sensorPollInterval = setInterval(pollSensorData, 2000); // Then every 2 seconds
+}
+
+function stopSensorPolling() {}
+
+function ensureScenarioButton(scenarioKey, text) {
+  const group = document.querySelector('.scenario-btns');
+  if (!group) return;
+  if (group.querySelector(`.scenario-btn[data-scenario="${scenarioKey}"]`)) return;
+
+  const btn = document.createElement('button');
+  btn.className = 'scenario-btn';
+  btn.dataset.scenario = scenarioKey;
+  btn.setAttribute('aria-pressed', 'false');
+  btn.innerHTML = `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+    ${text}
+  `;
+  group.prepend(btn);
+}
+
+function ensureGeminiButton() {
+  let geminiBtn = document.getElementById('geminiBtn');
+  if (geminiBtn) {
+    geminiBtn.textContent = '';
+    geminiBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>
+      Generate Gemini AI Insight
+    `;
+    return geminiBtn;
+  }
+
+  const whyBtn = document.getElementById('whyBtn');
+  if (!whyBtn || !whyBtn.parentElement) return null;
+
+  geminiBtn = document.createElement('button');
+  geminiBtn.className = 'why-btn';
+  geminiBtn.id = 'geminiBtn';
+  geminiBtn.style.flex = '1';
+  geminiBtn.innerHTML = `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>
+    Generate Gemini AI Insight
+  `;
+
+  whyBtn.insertAdjacentElement('afterend', geminiBtn);
+  return geminiBtn;
+}
+
+function updatePrototypeLabels() {
+  const note = document.getElementById('simulatedNote');
+  if (note) note.style.display = currentScenario === 'arduino-live' ? '' : 'none';
+}
+
+async function refreshArduinoMockPill() {
+  const pill = document.getElementById('arduinoMockPill');
+  if (!pill) return;
+  try {
+    const res = await fetch('http://localhost:3000/api/health');
+    if (!res.ok) {
+      pill.style.display = 'none';
+      return;
+    }
+    const data = await res.json();
+    pill.style.display = data.arduinoMock ? '' : 'none';
+  } catch (e) {
+    pill.style.display = 'none';
+    console.warn('Health check failed:', e);
+  }
+}
+
+function ensureWeatherBox() {
+  let wb = document.getElementById('openWeatherBox');
+  if (wb) return wb;
+
+  const whyBtn = document.getElementById('whyBtn');
+  if (!whyBtn || !whyBtn.parentElement) return null;
+
+  wb = document.createElement('div');
+  wb.id = 'openWeatherBox';
+  wb.className = 'weather-box';
+  wb.style.cssText = 'display:none;margin-top:8px;padding:8px;border-radius:6px;background:rgba(0,0,0,0.03);font-size:13px';
+
+  const buttonRow = whyBtn.parentElement;
+  buttonRow.parentElement.insertBefore(wb, buttonRow);
+  return wb;
+}
 
 /* ═══════════════════════════════════════════
    Navigation
@@ -234,6 +463,78 @@ function renderZone(scenario) {
 }
 
 /* ═══════════════════════════════════════════
+   Gemini AI Insight Generation
+═══════════════════════════════════════════ */
+async function generateGeminiInsight() {
+  console.log("Gemini insight clicked");
+  const mask = document.getElementById('loadingMask');
+  mask.classList.add('show');
+
+  try {
+    const sensorData = getActiveSensorPayload();
+    const weatherLocation = {
+      lat: 3.1390,
+      lon: 101.6869,
+      city: 'Kuala Lumpur'
+    };
+
+    const response = await fetch('http://localhost:3000/api/ai-insight', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        scenarioName: currentScenario,
+        sensorData: sensorData,
+        weatherLocation: weatherLocation
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log("Weather received by frontend:", data.weather);
+
+    if (data.error || !data.recommendation || !data.explanation || !data.impact) {
+      console.warn('Empty or error response from Gemini:', data);
+      alert('No AI insight generated. Error: ' + (data.error || 'Unknown error'));
+      mask.classList.remove('show');
+      return;
+    }
+
+    SCENARIOS[currentScenario].recommendation = data.recommendation;
+    SCENARIOS[currentScenario].explanation = data.explanation;
+    SCENARIOS[currentScenario].impact = data.impact;
+
+    renderAI(data.recommendation);
+    renderExplanation(data.explanation);
+    renderImpact(data.impact);
+
+    latestAIInsight = data;
+    refreshOverview();
+    refreshAIRecsLatest();
+    refreshImpactHero();
+
+    const wb = ensureWeatherBox();
+    if (wb && data.weather) {
+      wb.style.display = '';
+      wb.innerHTML = `<strong>OpenWeather Context</strong><div>${data.weather.city || ''} — ${data.weather.temperature ?? ''}°C — ${data.weather.condition || ''}</div>`;
+    } else if (wb) {
+      wb.style.display = 'none';
+      wb.innerHTML = '';
+    }
+
+    lastUpdateTime = Date.now();
+    document.getElementById('lastUpdateText').textContent = 'Just updated';
+  } catch (error) {
+    console.error('Gemini AI error:', error);
+    alert('Failed to generate AI insight. Make sure backend is running on localhost:3000');
+  } finally {
+    mask.classList.remove('show');
+  }
+}
+
+/* ═══════════════════════════════════════════
    Scenario Switch
 ═══════════════════════════════════════════ */
 function switchScenario(name) {
@@ -241,6 +542,7 @@ function switchScenario(name) {
   currentScenario = name;
   const mask = document.getElementById('loadingMask');
   mask.classList.add('show');
+  
   setTimeout(()=>{
     const d = SCENARIOS[name];
     renderSensors(d.sensors);
@@ -248,6 +550,7 @@ function switchScenario(name) {
     renderExplanation(d.explanation);
     renderImpact(d.impact);
     renderZone(name);
+    updatePrototypeLabels();
     lastUpdateTime = Date.now();
     document.getElementById('lastUpdateText').textContent = 'Just updated';
     mask.classList.remove('show');
@@ -312,6 +615,185 @@ function updateTimestamp() {
 }
 
 /* ═══════════════════════════════════════════
+   Mockup tab refreshers — read backend state into existing static cards
+═══════════════════════════════════════════ */
+function refreshOverview() {
+  const sensorsEl = document.getElementById('kpiSensorsOnline');
+  const sensorsDeltaEl = document.getElementById('kpiSensorsOnlineDelta');
+  if (sensorsEl && sensorsDeltaEl) {
+    if (lastSensorData) {
+      sensorsEl.textContent = '3';
+      sensorsDeltaEl.textContent = '↑ Live prototype sensors online';
+      sensorsDeltaEl.className = 'kpi-delta pos';
+    } else if (lastBackendLogs) {
+      sensorsEl.textContent = '0';
+      sensorsDeltaEl.textContent = 'Mock Active';
+      sensorsDeltaEl.className = 'kpi-delta neg';
+    }
+  }
+
+  const alertsEl = document.getElementById('kpiActiveAlerts');
+  const alertsDeltaEl = document.getElementById('kpiActiveAlertsDelta');
+  if (alertsEl && alertsDeltaEl && Array.isArray(lastBackendLogs)) {
+    const cnt = lastBackendLogs.filter(l => l.level === 'WARN' || l.level === 'ERROR').length;
+    alertsEl.textContent = String(cnt);
+    if (cnt === 0) {
+      alertsDeltaEl.textContent = '↑ All clear';
+      alertsDeltaEl.className = 'kpi-delta pos';
+    } else {
+      alertsDeltaEl.textContent = '↓ From backend logs';
+      alertsDeltaEl.className = 'kpi-delta neg';
+    }
+  }
+
+  const confEl = document.getElementById('kpiAIConfidence');
+  const confDeltaEl = document.getElementById('kpiAIConfidenceDelta');
+  if (confEl && confDeltaEl && latestAIInsight?.recommendation?.confidence != null) {
+    confEl.textContent = `${latestAIInsight.recommendation.confidence}%`;
+    confDeltaEl.textContent = '↑ From latest Gemini analysis';
+    confDeltaEl.className = 'kpi-delta pos';
+  }
+}
+
+function refreshLiveSensorsZoneA() {
+  if (!lastSensorData) return;
+  const tEl = document.getElementById('liveZoneATemp');
+  const hEl = document.getElementById('liveZoneAHumidity');
+  const sEl = document.getElementById('liveZoneASoilMoisture');
+  const sFill = document.getElementById('liveZoneASoilFill');
+  if (tEl) tEl.textContent = String(Math.round((Number(lastSensorData.temperature) || 0) * 10) / 10);
+  if (hEl) hEl.textContent = String(Math.round(Number(lastSensorData.humidity) || 0));
+  const soil = Math.round(Number(lastSensorData.soilMoisture) || 0);
+  if (sEl) sEl.textContent = String(soil);
+  if (sFill) sFill.style.width = `${Math.max(0, Math.min(100, soil))}%`;
+}
+
+function refreshAIRecsLatest() {
+  const grid = document.querySelector('#view-ai .ai-recs-grid');
+  if (!grid) return;
+  let card = document.getElementById('latestGeminiCard');
+  if (!card) {
+    card = document.createElement('div');
+    card.id = 'latestGeminiCard';
+    card.className = 'ai-rec-card';
+    card.style.gridColumn = '1 / -1';
+    card.style.borderColor = 'rgba(34,197,94,0.35)';
+    card.style.background = 'rgba(34,197,94,0.04)';
+    grid.prepend(card);
+  }
+
+  if (!latestAIInsight) {
+    card.innerHTML = `
+      <div class="ai-rec-header">
+        <div class="ai-rec-icon" style="background:rgba(34,197,94,0.12);color:var(--green-400)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+        <span class="priority-badge priority-low">LIVE</span>
+      </div>
+      <div class="ai-rec-title">Latest Gemini Recommendation</div>
+      <div class="ai-rec-body">No AI insight generated yet. Go to <strong>Scenario Lab</strong> and click <strong>Generate Gemini AI Insight</strong>.</div>
+      <div class="ai-rec-footer">
+        <span class="ai-rec-zone">From live backend</span>
+        <span class="ai-rec-conf">—</span>
+      </div>`;
+    return;
+  }
+
+  const r = latestAIInsight.recommendation || {};
+  const priority = String(r.priority || 'low').toLowerCase();
+  const priorityClass = priority === 'high' ? 'priority-high' : priority === 'medium' ? 'priority-medium' : 'priority-low';
+  const action = r.action || '';
+  const secondary = r.secondary ? ` — ${r.secondary}` : '';
+  card.innerHTML = `
+    <div class="ai-rec-header">
+      <div class="ai-rec-icon" style="background:rgba(34,197,94,0.12);color:var(--green-400)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div>
+      <span class="priority-badge ${priorityClass}">${escapeHtml(priority.toUpperCase())}</span>
+    </div>
+    <div class="ai-rec-title">${escapeHtml(r.title || 'Latest Gemini Recommendation')}</div>
+    <div class="ai-rec-body">${escapeHtml(action + secondary)}</div>
+    <div class="ai-rec-footer">
+      <span class="ai-rec-zone">Scenario: ${escapeHtml(currentScenario)}</span>
+      <span class="ai-rec-conf">Confidence ${escapeHtml(String(r.confidence ?? 0))}%</span>
+    </div>`;
+}
+
+function refreshImpactHero() {
+  if (!latestAIInsight?.impact) return;
+  const i = latestAIInsight.impact;
+  const waterEl = document.getElementById('impactWaterVal');
+  const fertEl  = document.getElementById('impactFertilizerVal');
+  const yieldEl = document.getElementById('impactYieldVal');
+  const riskEl  = document.getElementById('impactRiskVal');
+  const riskLabelEl = document.getElementById('impactRiskLabel');
+  const riskSubEl   = document.getElementById('impactRiskSub');
+  if (waterEl) waterEl.textContent = `-${Number(i.waterSavedPercent) || 0}%`;
+  if (fertEl)  fertEl.textContent  = `-${Number(i.fertilizerReductionPercent) || 0}%`;
+  if (yieldEl) yieldEl.textContent = `+${Number(i.yieldImprovementPercent) || 0}%`;
+  if (riskEl) {
+    const r = String(i.riskReduction || 'low').toLowerCase();
+    riskEl.textContent = r.toUpperCase();
+    riskEl.className = `impact-kpi-val ${r === 'high' ? 'green' : r === 'medium' ? 'amber' : 'blue'}`;
+  }
+  if (riskLabelEl) riskLabelEl.textContent = 'Risk Reduction';
+  if (riskSubEl)   riskSubEl.textContent   = 'from latest Gemini analysis';
+}
+
+/* ═══════════════════════════════════════════
+   System Logs — backend runtime log feed
+═══════════════════════════════════════════ */
+const LOG_BADGE_CLASS = { ERROR:'error', WARN:'warn', INFO:'info', OK:'ok', AI:'info', SENSOR:'info' };
+const LOG_DATA_LEVEL  = { ERROR:'error', WARN:'warn', INFO:'info', OK:'info',  AI:'ai',   SENSOR:'sensor' };
+let logsBackendActive = false;
+
+function escapeHtml(str) {
+  return String(str || '').replace(/[&<>"']/g, ch => (
+    { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]
+  ));
+}
+
+function renderSystemLogs(logs) {
+  const table = document.querySelector('#view-logs .log-table');
+  if (!table) return;
+  table.querySelectorAll('.log-entry:not(.header)').forEach(el => el.remove());
+
+  const frag = document.createDocumentFragment();
+  logs.forEach(log => {
+    const level    = String(log.level || 'INFO').toUpperCase();
+    const badgeCls = LOG_BADGE_CLASS[level] || 'info';
+    const dataLvl  = LOG_DATA_LEVEL[level]  || 'info';
+    const row = document.createElement('div');
+    row.className = 'log-entry';
+    row.dataset.level = dataLvl;
+    row.innerHTML = `
+      <div class="log-time">${escapeHtml(log.timestamp)}</div>
+      <div><span class="log-badge ${badgeCls}">${escapeHtml(level)}</span></div>
+      <div class="log-msg">${escapeHtml(log.message)}</div>
+      <div class="log-src">${escapeHtml(log.source)}</div>
+    `;
+    frag.appendChild(row);
+  });
+  table.appendChild(frag);
+
+  // Re-apply currently active filter so the new rows respect it
+  const activeBtn = document.querySelector('.log-filter-btn.active');
+  if (activeBtn) activeBtn.click();
+}
+
+async function fetchSystemLogs() {
+  try {
+    const res = await fetch('http://localhost:3000/api/logs');
+    if (!res.ok) throw new Error('logs endpoint not ok');
+    const data = await res.json();
+    if (!Array.isArray(data.logs)) return;
+    logsBackendActive = true;
+    lastBackendLogs = data.logs;
+    renderSystemLogs(data.logs);
+    refreshOverview();
+  } catch (e) {
+    if (!logsBackendActive) return; // backend never reachable — keep static fallback rows
+    console.warn('System Logs fetch failed, keeping last good logs:', e);
+  }
+}
+
+/* ═══════════════════════════════════════════
    Log Filter Buttons — with actual filtering
 ═══════════════════════════════════════════ */
 function initLogFilters() {
@@ -365,13 +847,17 @@ function initThemeToggle() {
    Init
 ═══════════════════════════════════════════ */
 window.addEventListener('DOMContentLoaded', ()=>{
-  // Initial scenario render
-  const init = SCENARIOS['normal'];
+  ensureScenarioButton('arduino-live', 'Arduino Live');
+
+  // Initial scenario render — default to Arduino Live (main prototype)
+  const init = SCENARIOS['arduino-live'];
   renderSensors(init.sensors);
   renderAI(init.recommendation);
   renderExplanation(init.explanation);
   renderImpact(init.impact);
-  renderZone('normal');
+  renderZone('arduino-live');
+  updatePrototypeLabels();
+  refreshArduinoMockPill();
 
   // Navigation wiring
   document.querySelectorAll('.nav-item[data-view]').forEach(item=>{
@@ -382,11 +868,11 @@ window.addEventListener('DOMContentLoaded', ()=>{
   });
 
   // Scenario buttons
-  document.querySelectorAll('.scenario-btn').forEach(btn=>{
-    btn.addEventListener('click',()=>{
-      if(demoMode) stopDemo();
-      switchScenario(btn.dataset.scenario);
-    });
+  document.body.addEventListener('click', (event) => {
+    const btn = event.target.closest('.scenario-btn');
+    if (!btn) return;
+    if(demoMode) stopDemo();
+    switchScenario(btn.dataset.scenario);
   });
 
   // Demo button
@@ -397,8 +883,26 @@ window.addEventListener('DOMContentLoaded', ()=>{
   // Why button
   document.getElementById('whyBtn').addEventListener('click', highlightKeywords);
 
+  ensureWeatherBox();
+
+  const geminiBtn = ensureGeminiButton();
+  if (geminiBtn && !geminiBtn.dataset.bound) {
+    geminiBtn.addEventListener('click', generateGeminiInsight);
+    geminiBtn.dataset.bound = 'true';
+    console.log("Gemini button ready");
+  } else if (geminiBtn) {
+    console.log("Gemini button ready");
+  }
+
   // Log filters
   initLogFilters();
+
+  // System Logs — pull live backend logs, fall back to static rows if backend down
+  fetchSystemLogs();
+  setInterval(fetchSystemLogs, 5000);
+
+  // Seed empty-state "Latest Gemini Recommendation" card on AI Recommendations tab
+  refreshAIRecsLatest();
 
   // Theme toggle
   initThemeToggle();
@@ -406,4 +910,7 @@ window.addEventListener('DOMContentLoaded', ()=>{
   // Timestamp
   setInterval(updateTimestamp, 5000);
   lastUpdateTime = Date.now();
+
+  // Backend is source of truth for live sensor stream
+  startSensorPolling();
 });

@@ -80,8 +80,9 @@ OPENWEATHER_API_KEY=your_openweather_key_here
 PORT=3000
 
 # Set to "false" to use a real Arduino over serial
+# Set to your own port for the arduino if you have one
 ARDUINO_MOCK=true
-ARDUINO_PORT=COM3
+ARDUINO_PORT=COM7
 ARDUINO_BAUD=9600
 
 # Default location used by the weather endpoint

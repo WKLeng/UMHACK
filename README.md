@@ -6,6 +6,14 @@ Built for **UMHACK 2026**.
 
 ---
 
+## Pitch Video
+
+Watch our UMHackathon 2026 pitch video here:
+
+[**UMHackathon 2026 Pitching Video**](https://drive.google.com/file/d/1wgbQi5LuKKTX2dGxpongu33BheLMkSU6/view?usp=drive_link)
+
+---
+
 ## Features
 
 - **Live sensor monitoring** — temperature, humidity, soil moisture, and irrigation state streamed from an Arduino (or a built-in mock generator).

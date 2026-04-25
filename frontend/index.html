@@ -119,6 +119,7 @@
           <div>
             <div class="page-zone"><h1>Farm Overview</h1></div>
             <div class="page-desc">Real-time summary of all growing zones, alerts, and system health.</div>
+            <span style="display:inline-block;font-size:0.65rem;font-weight:700;letter-spacing:0.06em;padding:3px 9px;border-radius:999px;background:rgba(251,191,36,0.12);color:var(--amber-400);border:1px solid rgba(251,191,36,0.3);margin-top:6px">DASHBOARD MOCKUP VIEW</span>
           </div>
         </div>
 
@@ -136,25 +137,25 @@
             <div class="kpi-icon" style="background:rgba(59,130,246,0.1);color:var(--blue-400)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
             </div>
-            <div class="kpi-val" style="color:var(--blue-400)">42</div>
+            <div class="kpi-val" style="color:var(--blue-400)" id="kpiSensorsOnline">42</div>
             <div class="kpi-label">Sensors Online</div>
-            <div class="kpi-delta pos">↑ 100% uptime</div>
+            <div class="kpi-delta pos" id="kpiSensorsOnlineDelta">↑ 100% uptime</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-icon" style="background:rgba(251,191,36,0.1);color:var(--amber-400)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
             </div>
-            <div class="kpi-val" style="color:var(--amber-400)">3</div>
+            <div class="kpi-val" style="color:var(--amber-400)" id="kpiActiveAlerts">3</div>
             <div class="kpi-label">Active Alerts</div>
-            <div class="kpi-delta neg">↓ Requires attention</div>
+            <div class="kpi-delta neg" id="kpiActiveAlertsDelta">↓ Requires attention</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-icon" style="background:rgba(192,132,252,0.1);color:var(--purple-400)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
             </div>
-            <div class="kpi-val" style="color:var(--purple-400)">94%</div>
+            <div class="kpi-val" style="color:var(--purple-400)" id="kpiAIConfidence">94%</div>
             <div class="kpi-label">AI Confidence Avg.</div>
-            <div class="kpi-delta pos">↑ +2% vs. yesterday</div>
+            <div class="kpi-delta pos" id="kpiAIConfidenceDelta">↑ +2% vs. yesterday</div>
           </div>
         </div>
 
@@ -239,6 +240,8 @@
           <div>
             <div class="page-zone"><h1>Live Sensor Telemetry</h1></div>
             <div class="page-desc">Real-time readings from all sensors across active growing zones.</div>
+            <span style="display:inline-block;font-size:0.65rem;font-weight:700;letter-spacing:0.06em;padding:3px 9px;border-radius:999px;background:rgba(251,191,36,0.12);color:var(--amber-400);border:1px solid rgba(251,191,36,0.3);margin-top:6px">DASHBOARD MOCKUP VIEW</span>
+            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:6px;font-style:italic">Temperature, humidity, and soil moisture are backend-driven (Zone A). Light, pH, EC, and NPK are simulated in prototype.</div>
           </div>
           <div class="syncing-badge" style="font-size:0.8rem">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
@@ -250,13 +253,13 @@
         <div class="sensor-full-grid" style="margin-bottom:28px">
           <div class="sensor-card" style="--accent-color:#EF4444">
             <div class="sensor-card-top"><div class="sensor-icon-wrap" style="background:rgba(239,68,68,0.1);color:#F87171"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg></div><div class="sensor-status-dot ok"></div></div>
-            <div class="sensor-name">Temperature</div><div><span class="sensor-value">22</span><span class="sensor-unit">°C</span></div>
+            <div class="sensor-name">Temperature</div><div><span class="sensor-value" id="liveZoneATemp">22</span><span class="sensor-unit">°C</span></div>
             <div class="sensor-range">Ideal <span>18–26°C</span></div>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px"><span class="status-chip ok">NORMAL</span><span class="trend-arrow stable"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/></svg> Stable</span></div>
           </div>
           <div class="sensor-card" style="--accent-color:#3B82F6">
             <div class="sensor-card-top"><div class="sensor-icon-wrap" style="background:rgba(59,130,246,0.1);color:#60A5FA"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg></div><div class="sensor-status-dot ok"></div></div>
-            <div class="sensor-name">Humidity</div><div><span class="sensor-value">65</span><span class="sensor-unit">%</span></div>
+            <div class="sensor-name">Humidity</div><div><span class="sensor-value" id="liveZoneAHumidity">65</span><span class="sensor-unit">%</span></div>
             <div class="sensor-range">Ideal <span>60–80%</span></div>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px"><span class="status-chip ok">NORMAL</span><span class="trend-arrow stable"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/></svg> Stable</span></div>
           </div>
@@ -268,9 +271,9 @@
           </div>
           <div class="sensor-card" style="--accent-color:#22C55E">
             <div class="sensor-card-top"><div class="sensor-icon-wrap" style="background:rgba(34,197,94,0.1);color:#4ADE80"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 8C8 10 5.9 16.17 3.82 19.17A6.006 6.006 0 0 0 9 22c3 0 5.14-1.33 7-4"/><path d="M8.09 13.91A10.003 10.003 0 0 1 14 10c3 0 5.33 1.34 6.73 3.5"/><path d="M12 22v-4"/></svg></div><div class="sensor-status-dot ok"></div></div>
-            <div class="sensor-name">Soil Moisture</div><div><span class="sensor-value">35</span><span class="sensor-unit">%</span></div>
+            <div class="sensor-name">Soil Moisture</div><div><span class="sensor-value" id="liveZoneASoilMoisture">35</span><span class="sensor-unit">%</span></div>
             <div class="sensor-range">Ideal <span>30–60%</span></div>
-            <div class="progress-wrap"><div class="progress-bg"><div class="progress-fill ok" style="width:35%"></div></div></div>
+            <div class="progress-wrap"><div class="progress-bg"><div class="progress-fill ok" id="liveZoneASoilFill" style="width:35%"></div></div></div>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px"><span class="status-chip ok">NORMAL</span><span class="trend-arrow stable"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/></svg> Stable</span></div>
           </div>
           <div class="sensor-card" style="--accent-color:#A855F7">
@@ -333,6 +336,7 @@
               </div>
             </div>
             <div class="page-desc">Simulate environmental stressors and evaluate AI response strategies for optimal yield protection.</div>
+            <span style="display:inline-block;font-size:0.65rem;font-weight:700;letter-spacing:0.06em;padding:3px 9px;border-radius:999px;background:rgba(34,197,94,0.12);color:var(--green-400);border:1px solid rgba(34,197,94,0.3);margin-top:6px">WORKING PROTOTYPE VIEW</span>
           </div>
           <button class="demo-btn" id="demoBtn" aria-label="Start auto-demo">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="demoBtnIcon"><polygon points="5 3 19 12 5 21 5 3"/></svg>
@@ -346,8 +350,17 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>
             Active Scenario Model
           </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin:-4px 0 12px 2px">
+            <span id="livePrototypePill" style="font-size:0.65rem;font-weight:700;letter-spacing:0.06em;padding:3px 9px;border-radius:999px;background:rgba(34,197,94,0.12);color:var(--green-400);border:1px solid rgba(34,197,94,0.3)">LIVE PROTOTYPE MODE</span>
+            <span id="arduinoMockPill" style="display:none;font-size:0.65rem;font-weight:700;letter-spacing:0.06em;padding:3px 9px;border-radius:999px;background:rgba(251,191,36,0.12);color:var(--amber-400);border:1px solid rgba(251,191,36,0.3)">ARDUINO MOCK ACTIVE</span>
+          </div>
           <div class="scenario-btns" role="group" aria-label="Select scenario">
-            <button class="scenario-btn active" data-scenario="normal" aria-pressed="true">
+            <button class="scenario-btn active" data-scenario="arduino-live" aria-pressed="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              Arduino Live
+              <span style="margin-left:6px;font-size:0.6rem;font-weight:700;padding:2px 6px;border-radius:999px;background:rgba(34,197,94,0.18);color:var(--green-400);letter-spacing:0.05em">LIVE</span>
+            </button>
+            <button class="scenario-btn" data-scenario="normal" aria-pressed="false">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
               Normal Condition
             </button>
@@ -385,6 +398,9 @@
                   Syncing Live
                 </div>
               </div>
+              <div id="simulatedNote" style="display:none;font-size:0.72rem;color:var(--text-muted);margin:-4px 0 10px 2px;font-style:italic">
+                Light, pH, EC, and NPK are simulated in prototype.
+              </div>
               <div class="sensor-grid" id="sensorGrid" role="list"></div>
             </section>
 
@@ -401,10 +417,17 @@
                 <div class="factors-title">Key Influencing Factors</div>
                 <div class="factors-list" id="factorsList"></div>
               </div>
-              <button class="why-btn" id="whyBtn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                Why this recommendation?
-              </button>
+              <div id="openWeatherBox" class="weather-box" style="display:none;margin-top:8px;padding:8px;border-radius:6px;background:rgba(0,0,0,0.03);font-size:13px"></div>
+              <div style="display: flex; gap: 8px; margin-top: 12px;">
+                <button class="why-btn" id="whyBtn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  Why this recommendation?
+                </button>
+                <button class="why-btn" id="geminiBtn" style="flex: 1;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>
+                  Generate Gemini AI Insight
+                </button>
+              </div>
             </section>
           </div>
 
@@ -493,6 +516,8 @@
           <div>
             <div class="page-zone"><h1>AI Recommendations</h1></div>
             <div class="page-desc">Active directives generated by the AI engine across all zones.</div>
+            <span style="display:inline-block;font-size:0.65rem;font-weight:700;letter-spacing:0.06em;padding:3px 9px;border-radius:999px;background:rgba(251,191,36,0.12);color:var(--amber-400);border:1px solid rgba(251,191,36,0.3);margin-top:6px">DASHBOARD MOCKUP VIEW</span>
+            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:6px;font-style:italic">Static recommendation overview. Real Gemini output is generated in Scenario Lab.</div>
           </div>
         </div>
         <div class="ai-recs-grid">
@@ -571,32 +596,34 @@
           <div>
             <div class="page-zone"><h1>Business Impact</h1></div>
             <div class="page-desc">Quantified benefits from AI-driven decisions vs. non-AI baseline operations.</div>
+            <span style="display:inline-block;font-size:0.65rem;font-weight:700;letter-spacing:0.06em;padding:3px 9px;border-radius:999px;background:rgba(251,191,36,0.12);color:var(--amber-400);border:1px solid rgba(251,191,36,0.3);margin-top:6px">DASHBOARD MOCKUP VIEW</span>
+            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:6px;font-style:italic">Projected business impact mockup. Real AI-generated impact appears in Scenario Lab after Gemini analysis.</div>
           </div>
         </div>
 
         <div class="impact-hero">
           <div class="impact-kpi">
-            <div class="impact-kpi-val green">-18%</div>
+            <div class="impact-kpi-val green" id="impactWaterVal">-18%</div>
             <div class="impact-kpi-label">Water Savings</div>
             <div class="impact-kpi-sub">vs. manual irrigation</div>
           </div>
           <div class="impact-divider"></div>
           <div class="impact-kpi">
-            <div class="impact-kpi-val amber">-22%</div>
+            <div class="impact-kpi-val amber" id="impactFertilizerVal">-22%</div>
             <div class="impact-kpi-label">Fertilizer Waste</div>
             <div class="impact-kpi-sub">vs. fixed-schedule dosing</div>
           </div>
           <div class="impact-divider"></div>
           <div class="impact-kpi">
-            <div class="impact-kpi-val green">+14%</div>
+            <div class="impact-kpi-val green" id="impactYieldVal">+14%</div>
             <div class="impact-kpi-label">Yield Improvement</div>
             <div class="impact-kpi-sub">vs. non-AI grow cycle</div>
           </div>
           <div class="impact-divider"></div>
           <div class="impact-kpi">
-            <div class="impact-kpi-val blue">94%</div>
-            <div class="impact-kpi-label">Avg. AI Confidence</div>
-            <div class="impact-kpi-sub">across all active zones</div>
+            <div class="impact-kpi-val blue" id="impactRiskVal">94%</div>
+            <div class="impact-kpi-label" id="impactRiskLabel">Avg. AI Confidence</div>
+            <div class="impact-kpi-sub" id="impactRiskSub">across all active zones</div>
           </div>
         </div>
 
@@ -638,6 +665,8 @@
           <div>
             <div class="page-zone"><h1>System Logs</h1></div>
             <div class="page-desc">Event logs, AI decisions, sensor alerts, and system diagnostics.</div>
+            <span style="display:inline-block;font-size:0.65rem;font-weight:700;letter-spacing:0.06em;padding:3px 9px;border-radius:999px;background:rgba(251,191,36,0.12);color:var(--amber-400);border:1px solid rgba(251,191,36,0.3);margin-top:6px">DASHBOARD MOCKUP VIEW</span>
+            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:6px;font-style:italic">Static event log preview. Runtime backend logs are shown in the terminal during demo.</div>
           </div>
         </div>
         <div class="log-filters">

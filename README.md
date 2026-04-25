@@ -1,16 +1,22 @@
 # AgriMind · Precision Agriculture AI Dashboard
 
-AgriMind is an AI-powered decision intelligence dashboard for urban vertical farming. It combines real-time sensor monitoring, weather context, and Google Gemini–based recommendations to help operators make smarter irrigation and fertilization decisions.
-
-Built for **UMHACK 2026**.
+> Built for **UMHackathon 2026**
 
 ---
 
-## Pitch Video
+## 🎥 Pitch Video (UMHackathon 2026)
 
-Watch our UMHackathon 2026 pitch video here:
+> ### ▶️ **[Watch the AgriMind Pitch Video on Google Drive](https://drive.google.com/file/d/1wgbQi5LuKKTX2dGxpongu33BheLMkSU6/view?usp=drive_link)**
+>
+> **Link:** https://drive.google.com/file/d/1wgbQi5LuKKTX2dGxpongu33BheLMkSU6/view?usp=drive_link
 
-[**UMHackathon 2026 Pitching Video**](https://drive.google.com/file/d/1wgbQi5LuKKTX2dGxpongu33BheLMkSU6/view?usp=drive_link)
+This is the official recorded pitch video for our UMHackathon 2026 submission. Please click the link above to view it on Google Drive.
+
+---
+
+## About AgriMind
+
+AgriMind is an AI-powered decision intelligence dashboard for urban vertical farming. It combines real-time sensor monitoring, weather context, and Google Gemini–based recommendations to help operators make smarter irrigation and fertilization decisions.
 
 ---
 
